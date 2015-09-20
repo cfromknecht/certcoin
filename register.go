@@ -1,4 +1,4 @@
-package main
+package certcoin
 
 import (
 	"crypto/ecdsa"
@@ -72,6 +72,7 @@ func verifySignedPublicKey(pkSignature string, publicKey ecdsa.PublicKey) bool {
 	return verifyStatus
 }
 
+/*
 func main() {
 	curve := elliptic.P256()
 
@@ -104,3 +105,4 @@ func main() {
 	fmt.Println("Online Key Verify:", onlinePKVerified)
 	fmt.Println("Offline Key Verify:", offlinePKVerified)
 }
+*/
