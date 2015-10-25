@@ -8,5 +8,5 @@ import (
 func main() {
 	fmt.Println("Hello world")
 	fmt.Println("Hashing hello")
-	fmt.Println(blockchain.CertHashStr("hello"))
+	fmt.Println(blockchain.CertHash64Str("hello"))
 }
