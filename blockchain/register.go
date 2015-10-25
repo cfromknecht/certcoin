@@ -72,8 +72,7 @@ func verifySignedPublicKey(pkSignature string, publicKey ecdsa.PublicKey) bool {
 	return verifyStatus
 }
 
-/*
-func main() {
+func main_test() {
 	curve := elliptic.P256()
 
 	onlineKey := new(ecdsa.PrivateKey)
@@ -105,4 +104,3 @@ func main() {
 	fmt.Println("Online Key Verify:", onlinePKVerified)
 	fmt.Println("Offline Key Verify:", offlinePKVerified)
 }
-*/
