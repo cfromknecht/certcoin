@@ -1,5 +1,1 @@
 package certcoin
-
-import (
-	"./blockchain"
-)

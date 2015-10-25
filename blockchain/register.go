@@ -1,4 +1,4 @@
-package certcoin
+package blockchain
 
 import (
 	"crypto/ecdsa"
