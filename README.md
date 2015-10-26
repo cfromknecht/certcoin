@@ -1,2 +1,2 @@
 # certcoin
-A Completely Decentralized PKI with Identity Retention
+A Decentralized PKI for Highly-Available Hierarchical Identities

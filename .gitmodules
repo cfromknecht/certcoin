@@ -1,0 +1,6 @@
+[submodule "asm"]
+	path = asm
+	url = git@github.com:cfromknecht/asm.git
+[submodule "cademlia"]
+	path = cademlia
+	url = git@github.com:cfromknecht/kademlia.git
