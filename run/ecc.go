@@ -6,7 +6,7 @@ import (
 	"crypto/md5"
 	"crypto/rand"
 	"fmt"
-	"github.com/cfromknecht/asm"
+	"github.com/cfromknecht/certcoin/asm"
 	"hash"
 	"io"
 	"math/big"

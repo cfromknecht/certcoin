@@ -1,7 +1,7 @@
 package core
 
 import (
-	"github.com/cfromknecht/asm"
+	"github.com/cfromknecht/certcoin/asm"
 
 	"encoding/json"
 	"fmt"
