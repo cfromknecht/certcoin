@@ -1,64 +1,58 @@
-package core
+package blockchain
 
 import (
-	"encoding/json"
-	"log"
+	"github.com/cfromknecht/certcoin/crypto"
 )
 
 const (
 	REVOKE_FEE = uint64(100)
 )
 
-type RevokeTxn struct {
-	TxnBase
-	Body             RevokeTxnBody     `json:"body"`
-	Signature        CertcoinSignature `json:"source_sig"`
-	OfflineSignature CertcoinSignature `json:"offline_sig"`
+func NewRevokeTxn(onlineSecret, offlineSecret crypto.CertcoinSecretKey,
+	source crypto.CertcoinPublicKey,
+	identity Identity) Txn {
+
+	fullName := identity.FullNameStr()
+	return Txn{
+		Type: Revoke,
+		Inputs: []Input{
+			Input{
+				PrevHash:  identity.Domain,
+				PublicKey: onlineSecret.PublicKey,
+				Signature: crypto.Sign(fullName, onlineSecret),
+			},
+			Input{
+				PrevHash:  identity.Subdomain,
+				PublicKey: offlineSecret.PublicKey,
+				Signature: crypto.Sign(fullName, offlineSecret),
+			},
+			Input{
+				PrevHash:  crypto.SHA256Sum{},
+				PublicKey: source,
+				Signature: crypto.CertcoinSignature{},
+			},
+		},
+		Outputs: []Output{
+			Output{
+				Address: crypto.SHA256Sum{},
+				Value:   REVOKE_FEE,
+			},
+		},
+	}
 }
 
-type RevokeTxnBody struct {
-	SourcePublicKey CertcoinPublicKey `json:"source_pk"`
-	Value           uint64            `json:"value"`
-	// PKI Informtion
-	Identity string `json:"identity"`
-}
+func (bc *Blockchain) ValidRevokeTxn(t Txn) bool {
+	if len(t.Inputs) < 3 || !(len(t.Outputs) == 1 && len(t.Outputs) == 2) {
+		return false
+	}
 
-func (t RevokeTxnBody) Hash() string {
-	json, err := json.Marshal(t)
+	identity, err := NewIdentity(string(t.Inputs[0].PrevHash[:]), string(t.Inputs[1].PrevHash[:]))
 	if err != nil {
-		log.Println(err)
-		panic("Unable to marshal revoke txn body")
+		return false
 	}
-
-	return CertcoinHash(json)
-}
-
-func NewRevokeTxn(offlineSecret CertcoinSecretKey,
-	source CertcoinPublicKey,
-	identity string) RevokeTxn {
-	return RevokeTxn{
-		TxnBase: TxnBase{
-			Type: Revoke,
-		},
-		Body: RevokeTxnBody{
-			SourcePublicKey: source,
-			Value:           REVOKE_FEE,
-			Identity:        identity,
-		},
-		Signature:        CertcoinSignature{},
-		OfflineSignature: CertcoinSignature{},
-	}
-}
-
-func (t RevokeTxn) Valid() bool {
 	// offlinePK := lookup from database
-	return t.TxnType() == Revoke &&
-		t.Body.Value >= REVOKE_FEE &&
-		Verify(t.Body.Hash(), t.Signature, t.Body.SourcePublicKey) &&
-		true
+	return t.Type == Revoke &&
+		t.Outputs[0].Value >= REVOKE_FEE &&
+		crypto.Verify(identity.FullNameStr(), t.Inputs[0].Signature, t.Inputs[0].PublicKey)
 	//Verify(t.Body.Hash(), t.OfflineSignature, offlinePK)
-}
-
-func (t RevokeTxn) TxnType() TxnType {
-	return t.Type
 }

@@ -1,68 +1,61 @@
-package core
+package blockchain
 
 import (
-	"encoding/json"
-	"log"
+	"github.com/cfromknecht/certcoin/crypto"
 )
 
 const (
 	REGISTRATION_FEE = uint64(1000)
 )
 
-type RegisterTxn struct {
-	TxnBase
-	Body      RegisterTxnBody
-	Signature CertcoinSignature
-}
-type RegisterTxnBody struct {
-	SourcePublicKey CertcoinPublicKey `json:"source_pk"`
-	Value           uint64            `json:"value"`
-	// PKI Informtion
-	Identity         string            `json:"identity"`
-	OnlinePublicKey  CertcoinPublicKey `json:"online_pk"`
-	OfflinePublicKey CertcoinPublicKey `json:"offline_pk"`
-	OnlineSignature  CertcoinSignature `json:"online_sig"`
-	OfflineSignature CertcoinSignature `json:"offline_sig"`
+func NewRegisterTxn(onlineSecret, offlineSecret crypto.CertcoinSecretKey,
+	source crypto.CertcoinPublicKey,
+	identity Identity) Txn {
+
+	fullName := identity.SubdomainStr() + identity.DomainStr()
+	return Txn{
+		Type: Register,
+		Inputs: []Input{
+			Input{
+				PrevHash:  identity.Domain,
+				PublicKey: onlineSecret.PublicKey,
+				Signature: crypto.Sign(fullName, onlineSecret),
+			},
+			Input{
+				PrevHash:  identity.Subdomain,
+				PublicKey: offlineSecret.PublicKey,
+				Signature: crypto.Sign(fullName, offlineSecret),
+			},
+			Input{
+				PrevHash:  crypto.SHA256Sum{},
+				PublicKey: source,
+				Signature: crypto.CertcoinSignature{},
+			},
+		},
+		Outputs: []Output{
+			Output{
+				Address: crypto.SHA256Sum{},
+				Value:   REGISTRATION_FEE,
+			},
+		},
+	}
 }
 
-func (b RegisterTxnBody) Hash() string {
-	json, err := json.Marshal(b)
+func (bc *Blockchain) ValidRegisterTxn(t Txn) bool {
+	if len(t.Inputs) < 3 || !(len(t.Outputs) == 1 && len(t.Outputs) == 2) {
+		return false
+	}
+
+	identity, err := NewIdentity(string(t.Inputs[0].PrevHash[:]), string(t.Inputs[1].PrevHash[:]))
 	if err != nil {
-		log.Println(err)
-		panic("Unable to marshal registration txn")
+		return false
 	}
 
-	return CertcoinHash(json)
-}
+	// Check that Identity is not registered
+	// Check that Identity-PKs is not in accumulator
 
-func NewRegisterTxn(onlineSecret, offlineSecret CertcoinSecretKey,
-	source CertcoinPublicKey,
-	identity string) RegisterTxn {
-	return RegisterTxn{
-		TxnBase: TxnBase{
-			Type: Register,
-		},
-		Body: RegisterTxnBody{
-			SourcePublicKey:  source,
-			Value:            REGISTRATION_FEE,
-			Identity:         identity,
-			OnlinePublicKey:  onlineSecret.PublicKey,
-			OfflinePublicKey: offlineSecret.PublicKey,
-			OnlineSignature:  Sign("", onlineSecret),
-			OfflineSignature: Sign("", offlineSecret),
-		},
-		Signature: CertcoinSignature{},
-	}
-}
-
-func (r RegisterTxn) Valid() bool {
-	return r.TxnType() == Register &&
-		r.Body.Value >= REGISTRATION_FEE &&
-		Verify(r.Body.Hash(), r.Signature, r.Body.SourcePublicKey) &&
-		Verify("", r.Body.OnlineSignature, r.Body.OnlinePublicKey) &&
-		Verify("", r.Body.OfflineSignature, r.Body.OfflinePublicKey)
-}
-
-func (r RegisterTxn) TxnType() TxnType {
-	return r.Type
+	return t.Type == Register &&
+		t.Outputs[0].Value >= REGISTRATION_FEE &&
+		crypto.Verify(identity.FullNameStr(), t.Inputs[0].Signature, t.Inputs[0].PublicKey) &&
+		crypto.Verify(identity.FullNameStr(), t.Inputs[1].Signature, t.Inputs[1].PublicKey)
 }

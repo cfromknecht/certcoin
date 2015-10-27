@@ -1,55 +1,32 @@
-package core
+package blockchain
 
 import (
-	"encoding/json"
-	"log"
+	"github.com/cfromknecht/certcoin/crypto"
 )
 
-type PaymentTxn struct {
-	TxnBase
-	Body      PaymentTxnBody    `json:"body"`
-	Signature CertcoinSignature `json:"signature"`
-}
-
-type PaymentTxnBody struct {
-	From      string            `json:"from"`
-	To        string            `json:"to"`
-	Value     uint64            `json:"value"`
-	PublicKey CertcoinPublicKey `json:"public_key"`
-}
-
-func (tb PaymentTxnBody) Hash() string {
-	txnBodyJson, err := json.Marshal(tb)
-	if err != nil {
-		log.Println(err)
-		panic("Unable to marshal txn")
-	}
-
-	return CertcoinHash(txnBodyJson)
-}
-
-func NewPaymentTxn(from CertcoinPublicKey, to string, value uint64) PaymentTxn {
-	return PaymentTxn{
-		TxnBase: TxnBase{
-			Type: Payment,
+func NewPaymentTxn(from crypto.CertcoinPublicKey, to crypto.SHA256Sum, value uint64) Txn {
+	return Txn{
+		Type: Payment,
+		Inputs: []Input{
+			Input{
+				PrevHash:  crypto.SHA256Sum{},
+				PublicKey: from,
+				Signature: crypto.CertcoinSignature{},
+			},
 		},
-		Body: PaymentTxnBody{
-			From:      Address(from),
-			To:        to,
-			Value:     value,
-			PublicKey: from,
+		Outputs: []Output{
+			Output{
+				Address: to,
+				Value:   value,
+			},
 		},
-		Signature: CertcoinSignature{},
 	}
 }
 
-func (t PaymentTxn) Valid() bool {
+func (bc *Blockchain) ValidPaymentTxn(t Txn) bool {
+	// Lookup amounts in UTXO
 	return t.Type == Payment &&
-		t.Body.From == Address(t.Body.PublicKey) &&
-		len(t.Body.To) < 45 &&
-		Verify(t.Body.Hash(), t.Signature, t.Body.PublicKey)
-}
-
-func (t PaymentTxn) TxnType() TxnType {
-	return t.Type
+		len(t.Inputs) >= 1 &&
+		len(t.Outputs) >= 1 &&
+		len(t.Outputs) <= 2
 }

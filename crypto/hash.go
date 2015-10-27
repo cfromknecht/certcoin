@@ -1,25 +1,31 @@
-package core
+package crypto
 
 import (
 	"crypto/sha256"
 	"encoding/base64"
 )
 
-func CertcoinHash(b []byte) string {
+type SHA256Sum [32]byte
+
+func (s SHA256Sum) String() string {
+	return B64Encode(s[:])
+}
+
+func CertcoinHash(b []byte) SHA256Sum {
 	hash1 := sha256.Sum256(b)
 	hash2 := sha256.Sum256(hash1[:])
 
-	return b64Encode(hash2[:])
+	return hash2
 }
 
-func CertcoinHashStr(s string) string {
+func CertcoinHashStr(s string) SHA256Sum {
 	return CertcoinHash([]byte(s))
 }
 
-func b64Encode(b []byte) string {
+func B64Encode(b []byte) string {
 	return base64.StdEncoding.EncodeToString(b)
 }
 
-func b64Decode(s string) ([]byte, error) {
+func B64Decode(s string) ([]byte, error) {
 	return base64.StdEncoding.DecodeString(s)
 }

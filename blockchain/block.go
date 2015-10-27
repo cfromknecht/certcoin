@@ -1,7 +1,8 @@
-package core
+package blockchain
 
 import (
 	"github.com/cfromknecht/certcoin/asm"
+	"github.com/cfromknecht/certcoin/crypto"
 
 	"encoding/json"
 	"fmt"
@@ -19,44 +20,40 @@ var (
 )
 
 type BlockHeader struct {
-	SeqNum      uint64       `json:"seq_num"`
-	PrevHash    string       `json:"prev_hash"`
-	MerkelRoot  asm.AsyncAcc `json:"merkle_root"`
-	Accumulator asm.AsyncAcc `json:"accumulator"`
-	Time        time.Time    `json:"time"`
-	Difficulty  uint64       `json:"difficulty"`
-	Nonce       uint64       `json:"nonce:"`
+	SeqNum     uint64       `json:"seq_num"`
+	PrevHash   string       `json:"prev_hash"`
+	TxnAcc     asm.AsyncAcc `json:"txn_acc"`
+	PKIAcc     asm.AsyncAcc `json:"pki_acc"`
+	Time       time.Time    `json:"time"`
+	Difficulty uint64       `json:"difficulty"`
+	Nonce      uint64       `json:"nonce:"`
 }
 
 type Block struct {
-	Header       BlockHeader   `json:"header"`
-	GenTxn       GenerationTxn `json:"gen_txn"`
-	PaymentTxns  []PaymentTxn  `json:"payment_txns"`
-	RevokeTxns   []RevokeTxn   `json:"revoke_txns"`
-	UpdateTxns   []UpdateTxn   `json:"update_txns"`
-	RegisterTxns []RegisterTxn `json:"register_txns"`
+	Header BlockHeader `json:"header"`
+	Txns   []Txn       `json:"txns"`
 }
 
-func (b Block) Json() string {
-	json, err := json.Marshal(b)
+func (b Block) Json() []byte {
+	blockJson, err := json.Marshal(b)
 	if err != nil {
 		log.Println(err)
-		panic("Unable to json.Marshal block")
+		panic("Unable to marshal block")
 	}
 
-	return string(json)
+	return blockJson
 }
 
-func NewBlock(prev Block, minerAddress string) Block {
+func NewBlock(prev Block, minerAddress crypto.SHA256Sum) Block {
 	return Block{
 		Header: BlockHeader{
-			SeqNum:      prev.Header.SeqNum + 1,
-			PrevHash:    prev.Hash(),
-			MerkelRoot:  prev.Header.MerkelRoot,
-			Accumulator: prev.Header.Accumulator,
-			Time:        time.Now(),
-			Difficulty:  CURRENT_DIFFICULTY,
-			Nonce:       0,
+			SeqNum:     prev.Header.SeqNum + 1,
+			PrevHash:   prev.Header.Hash().String(),
+			TxnAcc:     prev.Header.TxnAcc,
+			PKIAcc:     prev.Header.PKIAcc,
+			Time:       time.Now(),
+			Difficulty: CURRENT_DIFFICULTY,
+			Nonce:      0,
 		},
 		Txns: []Txn{
 			NewGenerationTxn(minerAddress),
@@ -67,40 +64,30 @@ func NewBlock(prev Block, minerAddress string) Block {
 func GenesisBlock() Block {
 	return Block{
 		Header: BlockHeader{
-			SeqNum:      1,
-			PrevHash:    "",
-			MerkelRoot:  asm.NewAsyncAcc(),
-			Accumulator: asm.NewAsyncAcc(),
-			Time:        time.Now(),
-			Difficulty:  CURRENT_DIFFICULTY,
-			Nonce:       0,
+			SeqNum:     1,
+			PrevHash:   "",
+			TxnAcc:     asm.NewAsyncAcc(),
+			PKIAcc:     asm.NewAsyncAcc(),
+			Time:       time.Now(),
+			Difficulty: CURRENT_DIFFICULTY,
+			Nonce:      0,
 		},
 		Txns: []Txn{},
 	}
 }
 
-func (b Block) Hash() string {
-	headerJson, err := json.Marshal(b.Header)
+func (b BlockHeader) Json() []byte {
+	headerJson, err := json.Marshal(b)
 	if err != nil {
 		log.Println(err)
-		panic("Unable to marshal block")
+		panic("Unable to marshal block header")
 	}
 
-	return CertcoinHash(headerJson)
+	return headerJson
 }
 
-func (b Block) Valid() bool {
-	if !b.ValidPoW() {
-		fmt.Println("Invalid PoW")
-		return false
-	}
-
-	if !b.ValidTxns() {
-		fmt.Println("Invalid txn")
-		return false
-	}
-
-	return true
+func (b BlockHeader) Hash() crypto.SHA256Sum {
+	return crypto.CertcoinHash(b.Json())
 }
 
 func (b Block) ValidPoW() bool {
@@ -108,7 +95,7 @@ func (b Block) ValidPoW() bool {
 	zeroBytes := difficulty / 8
 	bitOffset := difficulty % 8
 
-	h, err := b64Decode(b.Hash())
+	h, err := crypto.B64Decode(b.Header.Hash().String())
 	if err != nil {
 		log.Println(err)
 		panic("Unable to base64 decode hash")
@@ -140,59 +127,50 @@ func (b Block) ValidPoW() bool {
 
 func Mine() {
 	prev := GenesisBlock()
-	fromKey := NewKey()
-	toKey := NewKey()
+	fromKey := crypto.NewKey()
+	toKey := crypto.NewKey()
 
-	online := NewKey()
-	offline := NewKey()
+	online := crypto.NewKey()
+	offline := crypto.NewKey()
 
-	for {
-		b := NewBlock(prev, Address(fromKey.PublicKey))
+	//for {
+	b := NewBlock(prev, crypto.Address(fromKey.PublicKey))
 
-		// Create and sign txn
-		txn := NewPaymentTxn(fromKey.PublicKey, Address(toKey.PublicKey), 10)
-		txn.Signature = Sign(txn.Body.Hash(), fromKey)
-		b.Txns = append(b.Txns, txn)
+	// Create and sign txn
+	txn := NewPaymentTxn(fromKey.PublicKey, crypto.Address(toKey.PublicKey), 10)
+	txn.Inputs[0].Signature = crypto.Sign("", fromKey)
+	b.Txns = append(b.Txns, txn)
 
-		// Create and sign registration txn
-		rtxn := NewRegisterTxn(online, offline, fromKey.PublicKey, "certcoin.net")
-		rtxn.Signature = Sign(rtxn.Body.Hash(), fromKey)
-		b.Txns = append(b.Txns, rtxn)
-
-		newOnline := NewKey()
-		// Create and sign update txn
-		utxn := NewUpdateTxn(newOnline, fromKey.PublicKey, "certcoin.net")
-		utxn.Signature = Sign(utxn.Body.Hash(), fromKey)
-		utxn.OfflineSignature = Sign(utxn.Body.Hash(), offline)
-		b.Txns = append(b.Txns, utxn)
-
-		// Create and sign revoke txn
-		vtxn := NewRevokeTxn(offline, fromKey.PublicKey, "certcoin.net")
-		vtxn.Signature = Sign(vtxn.Body.Hash(), fromKey)
-		vtxn.OfflineSignature = Sign(vtxn.Body.Hash(), offline)
-		b.Txns = append(b.Txns, vtxn)
-
-		for !b.ValidPoW() {
-			b.Header.Nonce += 1
-		}
-
-		fmt.Println(fmt.Sprintf("%v", b.Json()))
-		fmt.Println(b.Hash())
-		fmt.Println("Valid?:", b.Valid())
-		prev = b
-	}
-}
-
-func (b Block) ValidTxns() bool {
-	for i, txn := range b.Txns {
-		if i == 0 {
-			if txn.TxnType() != Generation || !txn.Valid() {
-				return false
-			}
-		} else if !txn.Valid() {
-			return false
-		}
+	identity, err := NewIdentity("certcoin.net", "")
+	if err != nil {
+		fmt.Println(err)
+		panic(err)
 	}
 
-	return true
+	// Create and sign registration txn
+	rtxn := NewRegisterTxn(online, offline, fromKey.PublicKey, identity)
+	rtxn.Inputs[2].Signature = crypto.Sign("", fromKey)
+	b.Txns = append(b.Txns, rtxn)
+
+	newOnline := crypto.NewKey()
+	// Create and sign update txn
+	utxn := NewUpdateTxn(newOnline, offline, fromKey.PublicKey, identity)
+	utxn.Inputs[1].Signature = crypto.Sign("", offline)
+	utxn.Inputs[2].Signature = crypto.Sign("", fromKey)
+	b.Txns = append(b.Txns, utxn)
+
+	// Create and sign revoke txn
+	vtxn := NewRevokeTxn(newOnline, offline, fromKey.PublicKey, identity)
+	vtxn.Inputs[0].Signature = crypto.Sign("", offline)
+	vtxn.Inputs[1].Signature = crypto.Sign("", fromKey)
+	b.Txns = append(b.Txns, vtxn)
+
+	for !b.ValidPoW() {
+		b.Header.Nonce += 1
+	}
+
+	fmt.Println(fmt.Sprintf("%v", b.Json()))
+	fmt.Println(b.Header.Hash())
+	prev = b
+	//}
 }

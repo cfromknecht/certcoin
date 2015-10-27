@@ -1,27 +1,31 @@
-package core
+package blockchain
+
+import (
+	"github.com/cfromknecht/certcoin/crypto"
+)
 
 type GenerationTxn struct {
-	TxnBase
-	To    string
-	Value uint64
+	TxnType TxnType
+	Ins     []Input
+	Outs    []Output
 }
 
-func NewGenerationTxn(to string) GenerationTxn {
-	return GenerationTxn{
-		TxnBase: TxnBase{
-			Type: Generation,
+func NewGenerationTxn(to crypto.SHA256Sum) Txn {
+	return Txn{
+		Type:   Generation,
+		Inputs: []Input{},
+		Outputs: []Output{
+			Output{
+				Address: to,
+				Value:   CURRENT_BLOCK_REWARD,
+			},
 		},
-		To:    to,
-		Value: CURRENT_BLOCK_REWARD,
 	}
 }
 
-func (t GenerationTxn) Valid() bool {
-	return t.TxnType() == Generation &&
-		len(t.To) < 45 &&
-		t.Value == CURRENT_BLOCK_REWARD
-}
-
-func (t GenerationTxn) TxnType() TxnType {
-	return t.Type
+func (bc *Blockchain) ValidGenerationTxn(t Txn) bool {
+	return t.Type == Generation &&
+		len(t.Inputs) == 0 &&
+		len(t.Outputs) == 1 &&
+		t.Outputs[0].Value == CURRENT_BLOCK_REWARD
 }

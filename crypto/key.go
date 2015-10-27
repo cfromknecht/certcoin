@@ -1,4 +1,4 @@
-package core
+package crypto
 
 import (
 	"crypto/ecdsa"
@@ -58,7 +58,7 @@ func Sign(m string, sk CertcoinSecretKey) CertcoinSignature {
 	}
 
 	h := CertcoinHashStr(m)
-	r, s, err := ecdsa.Sign(rand.Reader, secret, []byte(h))
+	r, s, err := ecdsa.Sign(rand.Reader, secret, h[:])
 	if err != nil {
 		log.Println(err)
 		panic("Failed to sign message")
@@ -78,10 +78,10 @@ func Verify(m string, sig CertcoinSignature, pk CertcoinPublicKey) bool {
 	}
 
 	h := CertcoinHashStr(m)
-	return ecdsa.Verify(&public, []byte(h), sig.R, sig.S)
+	return ecdsa.Verify(&public, h[:], sig.R, sig.S)
 }
 
-func Address(pk CertcoinPublicKey) string {
+func Address(pk CertcoinPublicKey) SHA256Sum {
 	s, err := json.Marshal(pk)
 	if err != nil {
 		log.Println(err)

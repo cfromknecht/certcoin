@@ -1,69 +1,60 @@
-package core
+package blockchain
 
 import (
-	"encoding/json"
-	"log"
+	"github.com/cfromknecht/certcoin/crypto"
 )
 
 const (
 	UPDATE_FEE = uint64(100)
 )
 
-type UpdateTxn struct {
-	TxnBase
-	Body             UpdateTxnBody     `json:"body"`
-	Signature        CertcoinSignature `json:"source_sig"`
-	OfflineSignature CertcoinSignature `json:"offline_sig"`
+func NewUpdateTxn(onlineSecret, offlineSecret crypto.CertcoinSecretKey,
+	source crypto.CertcoinPublicKey,
+	identity Identity) Txn {
+
+	fullName := identity.SubdomainStr() + identity.DomainStr()
+	return Txn{
+		Type: Update,
+		Inputs: []Input{
+			Input{
+				PrevHash:  identity.Domain,
+				PublicKey: onlineSecret.PublicKey,
+				Signature: crypto.Sign(fullName, onlineSecret),
+			},
+			Input{
+				PrevHash:  identity.Subdomain,
+				PublicKey: offlineSecret.PublicKey,
+				Signature: crypto.Sign(fullName, offlineSecret),
+			},
+			Input{
+				PrevHash:  crypto.SHA256Sum{},
+				PublicKey: source,
+				Signature: crypto.CertcoinSignature{},
+			},
+		},
+		Outputs: []Output{
+			Output{
+				Address: crypto.SHA256Sum{},
+				Value:   UPDATE_FEE,
+			},
+		},
+	}
 }
 
-type UpdateTxnBody struct {
-	SourcePublicKey CertcoinPublicKey `json:"source_pk"`
-	Value           uint64            `json:"value"`
-	// PKI Informtion
-	Identity        string            `json:"identity"`
-	OnlinePublicKey CertcoinPublicKey `json:"online_pk"`
-	OnlineSignature CertcoinSignature `json:"online_sig"`
-}
+func (bc *Blockchain) ValidUpdateTxn(t Txn) bool {
+	if len(t.Inputs) < 3 || !(len(t.Outputs) == 1 && len(t.Outputs) == 2) {
+		return false
+	}
 
-func (t UpdateTxnBody) Hash() string {
-	json, err := json.Marshal(t)
+	identity, err := NewIdentity(string(t.Inputs[0].PrevHash[:]), string(t.Inputs[1].PrevHash[:]))
 	if err != nil {
-		log.Println(err)
-		panic("Unable to marshal update txn body")
+		return false
 	}
 
-	return CertcoinHash(json)
-}
-
-func NewUpdateTxn(onlineSecret CertcoinSecretKey,
-	source CertcoinPublicKey,
-	identity string) UpdateTxn {
-	return UpdateTxn{
-		TxnBase: TxnBase{
-			Type: Update,
-		},
-		Body: UpdateTxnBody{
-			SourcePublicKey: source,
-			Value:           UPDATE_FEE,
-			Identity:        identity,
-			OnlinePublicKey: onlineSecret.PublicKey,
-			OnlineSignature: Sign("", onlineSecret),
-		},
-		Signature:        CertcoinSignature{},
-		OfflineSignature: CertcoinSignature{},
-	}
-}
-
-func (t UpdateTxn) Valid() bool {
 	// offlinePK := lookup from database
-	return t.TxnType() == Update &&
-		t.Body.Value >= UPDATE_FEE &&
-		Verify(t.Body.Hash(), t.Signature, t.Body.SourcePublicKey) &&
-		Verify("", t.Body.OnlineSignature, t.Body.OnlinePublicKey) &&
-		true
-	//Verify(t.Body.Hash(), t.OfflineSignature, offlinePK)
-}
 
-func (t UpdateTxn) TxnType() TxnType {
-	return t.Type
+	return t.Type == Update &&
+		t.Outputs[0].Value >= UPDATE_FEE &&
+		crypto.Verify(identity.FullNameStr(), t.Inputs[0].Signature, t.Inputs[0].PublicKey)
+	//crypto.Verify(identity.FullNameStr(), t.OfflineSignature, offlinePK)
 }
