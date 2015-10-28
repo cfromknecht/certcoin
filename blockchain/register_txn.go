@@ -2,6 +2,8 @@ package blockchain
 
 import (
 	"github.com/cfromknecht/certcoin/crypto"
+
+	"log"
 )
 
 const (
@@ -12,7 +14,7 @@ func NewRegisterTxn(onlineSecret, offlineSecret crypto.CertcoinSecretKey,
 	source crypto.CertcoinPublicKey,
 	identity Identity) Txn {
 
-	fullName := identity.SubdomainStr() + identity.DomainStr()
+	fullName := identity.FullName()
 	return Txn{
 		Type: Register,
 		Inputs: []Input{
@@ -42,12 +44,16 @@ func NewRegisterTxn(onlineSecret, offlineSecret crypto.CertcoinSecretKey,
 }
 
 func (bc *Blockchain) ValidRegisterTxn(t Txn) bool {
-	if len(t.Inputs) < 3 || !(len(t.Outputs) == 1 && len(t.Outputs) == 2) {
+	if len(t.Inputs) < 3 || len(t.Outputs) != 1 && len(t.Outputs) != 2 {
 		return false
 	}
 
-	identity, err := NewIdentity(string(t.Inputs[0].PrevHash[:]), string(t.Inputs[1].PrevHash[:]))
+	domain := t.Inputs[0].PrevHash.String()
+	subdomain := t.Inputs[1].PrevHash.String()
+
+	identity, err := NewIdentity(domain, subdomain)
 	if err != nil {
+		log.Println(err)
 		return false
 	}
 
@@ -56,6 +62,6 @@ func (bc *Blockchain) ValidRegisterTxn(t Txn) bool {
 
 	return t.Type == Register &&
 		t.Outputs[0].Value >= REGISTRATION_FEE &&
-		crypto.Verify(identity.FullNameStr(), t.Inputs[0].Signature, t.Inputs[0].PublicKey) &&
-		crypto.Verify(identity.FullNameStr(), t.Inputs[1].Signature, t.Inputs[1].PublicKey)
+		crypto.Verify(identity.FullName(), t.Inputs[0].Signature, t.Inputs[0].PublicKey) &&
+		crypto.Verify(identity.FullName(), t.Inputs[1].Signature, t.Inputs[1].PublicKey)
 }

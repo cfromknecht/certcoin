@@ -20,13 +20,13 @@ var (
 )
 
 type BlockHeader struct {
-	SeqNum     uint64       `json:"seq_num"`
-	PrevHash   string       `json:"prev_hash"`
-	TxnAcc     asm.AsyncAcc `json:"txn_acc"`
-	PKIAcc     asm.AsyncAcc `json:"pki_acc"`
-	Time       time.Time    `json:"time"`
-	Difficulty uint64       `json:"difficulty"`
-	Nonce      uint64       `json:"nonce:"`
+	SeqNum     uint64           `json:"seq_num"`
+	PrevHash   crypto.SHA256Sum `json:"prev_hash"`
+	TxnAcc     asm.AsyncAcc     `json:"txn_acc"`
+	PKIAcc     asm.AsyncAcc     `json:"pki_acc"`
+	Time       time.Time        `json:"time"`
+	Difficulty uint64           `json:"difficulty"`
+	Nonce      uint64           `json:"nonce:"`
 }
 
 type Block struct {
@@ -44,13 +44,13 @@ func (b Block) Json() []byte {
 	return blockJson
 }
 
-func NewBlock(prev Block, minerAddress crypto.SHA256Sum) Block {
+func NewBlock(prev BlockHeader, minerAddress crypto.SHA256Sum) Block {
 	return Block{
 		Header: BlockHeader{
-			SeqNum:     prev.Header.SeqNum + 1,
-			PrevHash:   prev.Header.Hash().String(),
-			TxnAcc:     prev.Header.TxnAcc,
-			PKIAcc:     prev.Header.PKIAcc,
+			SeqNum:     prev.SeqNum + 1,
+			PrevHash:   prev.Hash(),
+			TxnAcc:     prev.TxnAcc,
+			PKIAcc:     prev.PKIAcc,
 			Time:       time.Now(),
 			Difficulty: CURRENT_DIFFICULTY,
 			Nonce:      0,
@@ -64,13 +64,13 @@ func NewBlock(prev Block, minerAddress crypto.SHA256Sum) Block {
 func GenesisBlock() Block {
 	return Block{
 		Header: BlockHeader{
-			SeqNum:     1,
-			PrevHash:   "",
+			SeqNum:     0,
+			PrevHash:   crypto.SHA256Sum{},
 			TxnAcc:     asm.NewAsyncAcc(),
 			PKIAcc:     asm.NewAsyncAcc(),
 			Time:       time.Now(),
 			Difficulty: CURRENT_DIFFICULTY,
-			Nonce:      0,
+			Nonce:      44006,
 		},
 		Txns: []Txn{},
 	}
@@ -90,17 +90,12 @@ func (b BlockHeader) Hash() crypto.SHA256Sum {
 	return crypto.CertcoinHash(b.Json())
 }
 
-func (b Block) ValidPoW() bool {
-	difficulty := b.Header.Difficulty
+func (bh BlockHeader) ValidPoW() bool {
+	difficulty := bh.Difficulty
 	zeroBytes := difficulty / 8
 	bitOffset := difficulty % 8
 
-	h, err := crypto.B64Decode(b.Header.Hash().String())
-	if err != nil {
-		log.Println(err)
-		panic("Unable to base64 decode hash")
-	}
-
+	h := bh.Hash()
 	for i, c := range h {
 		if uint64(i) < zeroBytes {
 			if c != 0 {
@@ -126,7 +121,14 @@ func (b Block) ValidPoW() bool {
 }
 
 func Mine() {
-	prev := GenesisBlock()
+	bc := NewBlockchain()
+
+	g := GenesisBlock()
+	for !g.Header.ValidPoW() {
+		g.Header.Nonce += 1
+	}
+	fmt.Println(fmt.Sprintf("Gen: %v", string(g.Json())))
+
 	fromKey := crypto.NewKey()
 	toKey := crypto.NewKey()
 
@@ -134,7 +136,7 @@ func Mine() {
 	offline := crypto.NewKey()
 
 	//for {
-	b := NewBlock(prev, crypto.Address(fromKey.PublicKey))
+	b := NewBlock(bc.LastHeader, crypto.Address(fromKey.PublicKey))
 
 	// Create and sign txn
 	txn := NewPaymentTxn(fromKey.PublicKey, crypto.Address(toKey.PublicKey), 10)
@@ -161,16 +163,25 @@ func Mine() {
 
 	// Create and sign revoke txn
 	vtxn := NewRevokeTxn(newOnline, offline, fromKey.PublicKey, identity)
-	vtxn.Inputs[0].Signature = crypto.Sign("", offline)
-	vtxn.Inputs[1].Signature = crypto.Sign("", fromKey)
 	b.Txns = append(b.Txns, vtxn)
 
-	for !b.ValidPoW() {
+	for !b.Header.ValidPoW() {
 		b.Header.Nonce += 1
 	}
 
-	fmt.Println(fmt.Sprintf("%v", b.Json()))
-	fmt.Println(b.Header.Hash())
-	prev = b
+	//fmt.Println(fmt.Sprintf("%v", b.Json()))
+	//fmt.Println(b.Header.Hash())
+
+	if bc.ValidBlock(b) {
+		err = bc.WriteBlock(b)
+		if err != nil {
+			log.Println(err)
+			panic("Unable to save block")
+		} else {
+			fmt.Println("Saved block successfully")
+		}
+	} else {
+		fmt.Println("Invalid Block")
+	}
 	//}
 }

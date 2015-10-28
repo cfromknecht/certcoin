@@ -3,78 +3,79 @@ package blockchain
 import (
 	db "github.com/syndtr/goleveldb/leveldb"
 
-	"errors"
 	"log"
 )
 
 type Blockchain struct {
 	SVP
-	blockDB *db.DB
-	utxnDB  *db.DB
+	BlockDBPath string
+	UTxnDBPath  string
 }
 
 func NewBlockchain() Blockchain {
 	bc := Blockchain{
-		SVP:     NewSVP(),
-		blockDB: nil,
-		utxnDB:  nil,
+		SVP:         NewSVP(),
+		BlockDBPath: "db/block.db",
+		UTxnDBPath:  "db/utxn.db",
 	}
 
-	// Connect to block database
-	blockConn, err := db.OpenFile("db/block.db", nil)
-	if err != nil {
-		log.Println(err)
-		panic("Unable to open block database")
+	g := GenesisBlock()
+	for !g.Header.ValidPoW() {
+		g.Header.Nonce += 1
 	}
-	defer func() { blockConn.Close() }()
-	bc.blockDB = blockConn
 
-	// Connect to utxn database
-	utxnConn, err := db.OpenFile("db/utxn.db", nil)
-	if err != nil {
-		log.Println(err)
-		panic("Unable to open block database")
+	if bc.ValidBlock(g) {
+		err := bc.WriteBlock(g)
+		if err != nil {
+			log.Println(err)
+			panic("Unable to add genesis block to database")
+		}
+	} else {
+		panic("Genesis block invalid")
 	}
-	defer func() { utxnConn.Close() }()
-	bc.utxnDB = utxnConn
 
 	return bc
 }
 
-func (bc *Blockchain) VerifyAddBlock(b Block) error {
-	if !bc.ValidBlock(b) {
-		return errors.New("Cannot add invalid block")
-	}
+func (bc *Blockchain) ValidBlock(b Block) bool {
+	return bc.ValidHeader(b.Header) &&
+		bc.ValidTxns(b)
+}
 
+func (bc *Blockchain) WriteBlock(b Block) error {
 	err := bc.WriteHeader(b.Header)
 	if err != nil {
 		log.Println(err)
 		return err
 	}
 
-	err = bc.WriteBlock(b)
+	blockDB, err := db.OpenFile(bc.BlockDBPath, nil)
 	if err != nil {
 		log.Println(err)
-		return err
+		panic("Unable to open block database")
 	}
+	defer blockDB.Close()
 
-	return nil
-}
-
-func (bc *Blockchain) WriteBlock(b Block) error {
 	hash := b.Header.Hash()
-	err := bc.blockDB.Put(hash[:], b.Json(), nil)
+	err = blockDB.Put(hash[:], b.Json(), nil)
 	if err != nil {
 		log.Println(err)
 		return err
 	}
+
+	utxnDB, err := db.OpenFile(bc.UTxnDBPath, nil)
+	if err != nil {
+		log.Println(err)
+		panic("Unable to open utxn database")
+	}
+	defer utxnDB.Close()
 
 	batch := &db.Batch{}
 	for _, txn := range b.Txns {
 		txnHash := txn.Hash()
 		batch.Put(txnHash[:], txn.Json())
 	}
-	err = bc.utxnDB.Write(batch, nil)
+	err = utxnDB.Write(batch, nil)
 	if err != nil {
 		log.Println(err)
 		return err
@@ -83,35 +84,37 @@ func (bc *Blockchain) WriteBlock(b Block) error {
 	return nil
 }
 
-func (bc *Blockchain) ValidBlock(b Block) bool {
-	if !b.ValidPoW() {
-		return false
-	}
-
+func (bc *Blockchain) ValidTxns(b Block) bool {
 	for i, txn := range b.Txns {
 		if i == 0 && txn.Type != Generation {
+			log.Println("First is not a GenerationTxn")
 			return false
 		}
 
 		switch txn.Type {
 		case Generation:
 			if !bc.ValidGenerationTxn(txn) {
+				log.Println("Invalid GenerationTxn")
 				return false
 			}
 		case Payment:
 			if !bc.ValidPaymentTxn(txn) {
+				log.Println("Invalid PaymentTxn")
 				return false
 			}
 		case Register:
 			if !bc.ValidRegisterTxn(txn) {
+				log.Println("Invalid RegisterTxn")
 				return false
 			}
 		case Update:
 			if !bc.ValidUpdateTxn(txn) {
+				log.Println("Invalid UpdateTxn")
 				return false
 			}
 		case Revoke:
 			if !bc.ValidRevokeTxn(txn) {
+				log.Println("Invalid RevokeTxn")
 				return false
 			}
 		}

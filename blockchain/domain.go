@@ -41,16 +41,8 @@ func NewIdentity(domain, subdomain string) (Identity, error) {
 	}, nil
 }
 
-func (i Identity) DomainStr() string {
-	return string(i.Domain[:])
-}
-
-func (i Identity) SubdomainStr() string {
-	return string(i.Subdomain[:])
-}
-
-func (i Identity) FullNameStr() string {
-	return string(i.Domain[:]) + string(i.Subdomain[:])
+func (i Identity) FullName() string {
+	return i.Subdomain.String() + i.Domain.String()
 }
 
 func validDomain(d string) bool {

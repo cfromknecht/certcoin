@@ -12,7 +12,7 @@ func NewUpdateTxn(onlineSecret, offlineSecret crypto.CertcoinSecretKey,
 	source crypto.CertcoinPublicKey,
 	identity Identity) Txn {
 
-	fullName := identity.SubdomainStr() + identity.DomainStr()
+	fullName := identity.FullName()
 	return Txn{
 		Type: Update,
 		Inputs: []Input{
@@ -42,11 +42,14 @@ func NewUpdateTxn(onlineSecret, offlineSecret crypto.CertcoinSecretKey,
 }
 
 func (bc *Blockchain) ValidUpdateTxn(t Txn) bool {
-	if len(t.Inputs) < 3 || !(len(t.Outputs) == 1 && len(t.Outputs) == 2) {
+	if len(t.Inputs) < 3 || len(t.Outputs) != 1 && len(t.Outputs) != 2 {
 		return false
 	}
 
-	identity, err := NewIdentity(string(t.Inputs[0].PrevHash[:]), string(t.Inputs[1].PrevHash[:]))
+	domain := t.Inputs[0].PrevHash.String()
+	subdomain := t.Inputs[1].PrevHash.String()
+
+	identity, err := NewIdentity(domain, subdomain)
 	if err != nil {
 		return false
 	}
@@ -55,6 +58,6 @@ func (bc *Blockchain) ValidUpdateTxn(t Txn) bool {
 
 	return t.Type == Update &&
 		t.Outputs[0].Value >= UPDATE_FEE &&
-		crypto.Verify(identity.FullNameStr(), t.Inputs[0].Signature, t.Inputs[0].PublicKey)
-	//crypto.Verify(identity.FullNameStr(), t.OfflineSignature, offlinePK)
+		crypto.Verify(identity.FullName(), t.Inputs[0].Signature, t.Inputs[0].PublicKey)
+	//crypto.Verify(identity.FullName(), t.OfflineSignature, offlinePK)
 }

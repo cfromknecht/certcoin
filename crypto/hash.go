@@ -7,8 +7,19 @@ import (
 
 type SHA256Sum [32]byte
 
-func (s SHA256Sum) String() string {
+func (s SHA256Sum) B64Encode() string {
 	return B64Encode(s[:])
+}
+
+func (s SHA256Sum) String() string {
+	n := -1
+	for i, b := range s[:] {
+		if b == 0 {
+			break
+		}
+		n = i
+	}
+	return string(s[:n+1])
 }
 
 func CertcoinHash(b []byte) SHA256Sum {

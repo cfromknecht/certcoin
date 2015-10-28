@@ -1,43 +1,59 @@
 package blockchain
 
 import (
+	"github.com/cfromknecht/certcoin/crypto"
 	db "github.com/syndtr/goleveldb/leveldb"
 
 	"log"
 )
 
 type SVP struct {
-	headerDB   *db.DB
-	LastHeader BlockHeader
+	HeaderDBPath string
+	LastHeader   BlockHeader
 }
 
 func NewSVP() SVP {
 	svp := SVP{
-		headerDB:   nil,
-		LastHeader: GenesisBlock().Header,
+		HeaderDBPath: "db/header.db",
 	}
 
-	headerConn, err := db.OpenFile("db/header.db", nil)
+	err := svp.WriteHeader(GenesisBlock().Header)
 	if err != nil {
 		log.Println(err)
-		panic("Unable to open header database")
+		panic("Unable to add genesis block header to database")
 	}
-	defer func() { headerConn.Close() }()
-	svp.headerDB = headerConn
 
 	return svp
 }
 
+func (s *SVP) ValidHeader(header BlockHeader) bool {
+	if header.SeqNum == 0 {
+		return header.PrevHash == crypto.SHA256Sum{} &&
+			header.ValidPoW()
+	}
+
+	return s.LastHeader.Hash() == header.PrevHash &&
+		header.ValidPoW()
+}
+
 func (s *SVP) WriteHeader(header BlockHeader) error {
+	headerDB, err := db.OpenFile(s.HeaderDBPath, nil)
+	if err != nil {
+		log.Println(err)
+		panic("Unable to open header database")
+	}
+	defer headerDB.Close()
+
 	headerJson := header.Json()
 	hash := header.Hash()
 
-	err := s.headerDB.Put(hash[:], headerJson, nil)
+	err = headerDB.Put(hash[:], headerJson, nil)
 	if err != nil {
 		log.Println(err)
 		return err
 	}
 
+	log.Println("Last header:", header)
 	s.LastHeader = header
 
 	return nil
