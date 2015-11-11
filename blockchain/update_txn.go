@@ -42,7 +42,7 @@ func NewUpdateTxn(onlineSecret, offlineSecret crypto.CertcoinSecretKey,
 }
 
 func (bc *Blockchain) ValidUpdateTxn(t Txn) bool {
-	if len(t.Inputs) < 3 || len(t.Outputs) != 1 && len(t.Outputs) != 2 {
+	if !t.ValidNumInputs(2) || !t.ValidNumOutputs() {
 		return false
 	}
 

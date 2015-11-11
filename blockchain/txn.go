@@ -47,6 +47,11 @@ func (t Txn) Hash() crypto.SHA256Sum {
 	return crypto.CertcoinHash(t.Json())
 }
 
-func (t Txn) Valid(bc *Blockchain) bool {
-	return true
+func (t Txn) ValidNumInputs(reserved int) bool {
+	return len(t.Inputs) >= reserved+1
+}
+
+func (t Txn) ValidNumOutputs() bool {
+	return len(t.Outputs) == 1 ||
+		len(t.Outputs) == 2
 }

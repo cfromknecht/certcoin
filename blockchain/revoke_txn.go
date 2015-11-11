@@ -51,7 +51,7 @@ func NewRevokeTxn(onlineSecret, offlineSecret crypto.CertcoinSecretKey,
 }
 
 func (bc *Blockchain) ValidRevokeTxn(t Txn) bool {
-	if len(t.Inputs) < 3 || len(t.Outputs) != 1 && len(t.Outputs) != 2 {
+	if !t.ValidNumInputs(2) || !t.ValidNumOutputs() {
 		return false
 	}
 
@@ -67,18 +67,7 @@ func (bc *Blockchain) ValidRevokeTxn(t Txn) bool {
 
 	// offlinePK := lookup from database
 
-	if t.Type != Revoke {
-		log.Println("Invalid Type")
-		return false
-	}
-	if t.Outputs[0].Value != REVOKE_FEE {
-		log.Println("Invalid Value")
-		return false
-	}
-	if !crypto.Verify(identity.FullName(), t.Inputs[0].Signature, t.Inputs[0].PublicKey) {
-		log.Println("Invalid Sig")
-		return false
-	}
-
-	return true
+	return t.Type == Revoke &&
+		t.Outputs[0].Value >= REVOKE_FEE &&
+		crypto.Verify(identity.FullName(), t.Inputs[0].Signature, t.Inputs[0].PublicKey)
 }

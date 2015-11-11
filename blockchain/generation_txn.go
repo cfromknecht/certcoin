@@ -26,6 +26,6 @@ func NewGenerationTxn(to crypto.SHA256Sum) Txn {
 func (bc *Blockchain) ValidGenerationTxn(t Txn) bool {
 	return t.Type == Generation &&
 		len(t.Inputs) == 0 &&
-		len(t.Outputs) == 1 &&
+		t.ValidNumOutputs() &&
 		t.Outputs[0].Value == CURRENT_BLOCK_REWARD
 }

@@ -26,7 +26,6 @@ func NewPaymentTxn(from crypto.CertcoinPublicKey, to crypto.SHA256Sum, value uin
 func (bc *Blockchain) ValidPaymentTxn(t Txn) bool {
 	// Lookup amounts in UTXO
 	return t.Type == Payment &&
-		len(t.Inputs) >= 1 &&
-		len(t.Outputs) >= 1 &&
-		len(t.Outputs) <= 2
+		t.ValidNumInputs(0) &&
+		t.ValidNumOutputs()
 }
