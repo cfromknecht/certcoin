@@ -85,6 +85,7 @@ func (bc *Blockchain) WriteBlock(b Block) error {
 }
 
 func (bc *Blockchain) ValidTxns(b Block) bool {
+	// Check validity of each transaction
 	for i, txn := range b.Txns {
 		if i == 0 && txn.Type != Generation {
 			log.Println("First is not a GenerationTxn")
@@ -118,6 +119,52 @@ func (bc *Blockchain) ValidTxns(b Block) bool {
 				return false
 			}
 		}
+	}
+
+	// Check that accumulator is constructed properly
+	prevAcc := bc.SVP.LastHeader.PKIAcc
+	for _, txn := range b.Txns {
+		switch txn.Type {
+		case Register:
+			domain := txn.Inputs[0].PrevHash.String()
+			subdomain := txn.Inputs[1].PrevHash.String()
+			identity, err := NewIdentity(domain, subdomain)
+			if err != nil {
+				log.Println(err)
+				return false
+			}
+			fullName := identity.FullName()
+
+			y := fullName +
+				string(txn.Inputs[0].PublicKey.X.Bytes()) +
+				string(txn.Inputs[0].PublicKey.Y.Bytes())
+			prevAcc.Add(y)
+		default:
+			continue
+		}
+	}
+
+	return compareSlice(prevAcc, b.Header.PKIAcc)
+}
+
+func compareSlice(s1, s2 []string) bool {
+	if s1 == nil && s2 == nil {
+		return true
+	}
+
+	if s1 == nil || s2 == nil {
+		return false
+	}
+
+	if len(s1) != len(s2) {
+		return false
+	}
+
+	for i := range s1 {
+		if s1[i] != s2[i] {
+			return false
+		}
+
 	}
 
 	return true
